@@ -1,4 +1,5 @@
 import argparse
+import click
 import cv2
 import logging
 import numpy as np
@@ -8,6 +9,9 @@ import time
 
 from flask import Flask, jsonify, request, Response
 from . import analytic_pb2
+
+class Context:
+    pass
 
 class EndpointAction(object):
 
@@ -100,7 +104,6 @@ class Streamer:
         img = cv2.imread(imagefile)
         req, resp = self.process_frame(img, timestamp=time.time(), frame_num=0)
 
-
     def stream_video(self, videofile):
         self.check_func()
         cap = cv2.VideoCapture(videofile)
@@ -124,7 +127,6 @@ class Streamer:
         self.analytic_func(frame, req, resp)
         resp.end_time_millis = int(round(time.time()*1000))
         if self.output_func:
-            print(frame.shape)
             self.output_func(frame, req, resp)
         return req, resp
         
@@ -134,30 +136,50 @@ class Streamer:
         analytic_server.register_output_func(self.output_func)
         analytic_server.run()  
 
-
     def run(self):
         """ The run function starts a process to send image/video data to the analtyic. Arguments can
         be used to specify a connected camera, video file, or image file to be processed, or used to
         run the application in server mode."""
-
-        parser = argparse.ArgumentParser()
-        parser.add_argument("--videofile", default=None, help="Video file to process")
-        parser.add_argument("--imagefile", default=None, help="Image file to process")
-        parser.add_argument("--camera_id", default=0, help="Camera ID on the host machine")
-        parser.add_argument("--serve", default=False, help="If true starts up an analytic service", action="store_true")
-        parser.add_argument("--service_port", default=50051, help="Port on which to run the analytic service")
-        args = parser.parse_args()
-
-        if args.serve:
-            self.serve(port=args.service_port)
-        else:
-            if args.videofile:
-                self.stream_video(args.videofile)
-            elif args.imagefile:
-                self.stream_image(args.imagefile)
-            elif args.camera_id:
-                self.stream_camera(args.camera_id)
-            else:
-                raise ValueError("No Valid option specified. Must specify a source (Video, Image, or Camera")
+        x = CLI(self)
+        x.run()
 
 
+class CLI:
+    def __init__(self, streamer):
+        """Creates a basic click CLI that can be extended with user options/arguments"""
+        def initialize(ctx):
+            ctx.ensure_object(Context)
+            ctx.obj.streamer = streamer
+
+        def image(ctx, imagefile):
+            streamer = ctx.obj.streamer
+            streamer.stream_image(imagefile)
+
+        def video(ctx, videofile):
+            streamer = ctx.obj.streamer
+            streamer.stream_video(videofile)
+
+        def camera(ctx, camera_id):
+            streamer = ctx.obj.streamer
+            streamer.stream_camera(camera_id)
+
+        initialize = click.pass_context(initialize)
+        image = click.pass_context(image)
+        video = click.pass_context(video)
+
+        self.main = click.Group(name="main", callback=initialize)
+        
+        image_arg = click.Argument(param_decls=["imagefile"], type=str)
+        img_cmd = click.Command(name="image", callback=image, params=[image_arg])
+        self.main.add_command(img_cmd, name="image")
+
+        video_arg = click.Argument(param_decls=["videofile"], type=str)
+        vid = click.Command(name="video", callback=video, params=[video_arg])
+        self.main.add_command(vid, name="video")
+
+        camera_arg = click.Option(param_decls=["--camera_id"], default=0)
+        cam = click.Command(name="camera", callback=camera, params=[camera_arg])
+        self.main.add_command(cam, name="camera")
+    
+    def run(self):
+        self.main(obj=Context())
