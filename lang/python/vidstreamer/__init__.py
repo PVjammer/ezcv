@@ -185,6 +185,7 @@ class CLI:
         initialize = click.pass_context(initialize)
         image = click.pass_context(image)
         video = click.pass_context(video)
+        camera = click.pass_context(camera)
 
         opts = []
         for i in range(len(options)):
