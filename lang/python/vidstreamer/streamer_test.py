@@ -1,6 +1,6 @@
 import unittest
 import numpy as np
-from . import analytic_pb2
+from vidstreamer import analytic_pb2
 from .__init__ import Streamer
 
 

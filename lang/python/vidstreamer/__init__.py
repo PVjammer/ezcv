@@ -136,38 +136,60 @@ class Streamer:
         analytic_server.register_output_func(self.output_func)
         analytic_server.run()  
 
-    def run(self):
+    def run(self, parameters=[], init_func=None):
         """ The run function starts a process to send image/video data to the analtyic. Arguments can
         be used to specify a connected camera, video file, or image file to be processed, or used to
-        run the application in server mode."""
-        x = CLI(self)
+        run the application in server mode. An optional intialization function that takes the streamer object 
+        as an argument can be passed to do initialization steps (e.g., load a model using parameters passed in
+        from the command line)"""
+        x = CLI(self, options=parameters, init_func=init_func)
+        if init_func:
+            self.init_func = init_func
         x.run()
 
+class StreamerParam:
+    def __init__(self, name, default=None, type=None, helptext=None):
+        self.name = name
+        self.default = default
+        self.type = type
+        self.help = helptext
+
+        # Convert any arguments passed in to options.
+        if self.name[:2] != "--":
+            self.name = "--{!s}".format(name)
 
 class CLI:
-    def __init__(self, streamer):
+    def __init__(self, streamer, options=[], init_func=None):
         """Creates a basic click CLI that can be extended with user options/arguments"""
-        def initialize(ctx):
+        self.init_func = init_func
+        def initialize(ctx, **kwargs):
             ctx.ensure_object(Context)
             ctx.obj.streamer = streamer
+            ctx.obj.streamer.params = kwargs
 
         def image(ctx, imagefile):
             streamer = ctx.obj.streamer
+            self.init_func(streamer)
             streamer.stream_image(imagefile)
 
         def video(ctx, videofile):
             streamer = ctx.obj.streamer
+            self.init_func(streamer)
             streamer.stream_video(videofile)
 
         def camera(ctx, camera_id):
             streamer = ctx.obj.streamer
+            self.init_func(streamer)
             streamer.stream_camera(camera_id)
 
         initialize = click.pass_context(initialize)
         image = click.pass_context(image)
         video = click.pass_context(video)
 
-        self.main = click.Group(name="main", callback=initialize)
+        opts = []
+        for i in range(len(options)):
+            opts.append(click.Option(param_decls=[options[i].name], default=options[i].default, type=options[i].type, help=options[i].help))
+        self.main = click.Group(name="main", callback=initialize, params=opts)
         
         image_arg = click.Argument(param_decls=["imagefile"], type=str)
         img_cmd = click.Command(name="image", callback=image, params=[image_arg])
@@ -183,3 +205,11 @@ class CLI:
     
     def run(self):
         self.main(obj=Context())
+    
+    def add_options(self, options=[]):
+        """Add options to the initialization function (main command) that can be passed 
+        to all other functions. All option values are added to the streamer in the `streamer.params` 
+        field"""
+        opts = []
+        for i in range(len(options)):
+            opt.append(click.Option(param_decls=[options[i].name], default=options[i].default, type=options[i].type, help=options[i].help))
