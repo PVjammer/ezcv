@@ -8,7 +8,7 @@
 // Command to compile protocol buffers for golang:
 // $ protoc -I./proto --go_out=plugins=grpc:./pkg/analyticproto/ ./proto/*.proto
 syntax = "proto3";  
-package ace;
+package vidstreamer;
 
 import "google/rpc/status.proto";
 
